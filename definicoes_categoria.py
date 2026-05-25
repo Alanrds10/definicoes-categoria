@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-App Streamlit - Gerador Scanntech (Correção Sintática e Atualização de Componentes)
+App Streamlit - Gerador Scanntech com Evasão Anti-Bot Avançada (Proxy CDN)
 """
 import streamlit as st
 import pandas as pd
@@ -10,32 +10,38 @@ import requests
 import io
 import zipfile
 import os
+import urllib.parse
 from urllib.parse import urlparse, parse_qs, unquote
 
 # Validação das Dependências Gráficas do Sistema
 try:
     from weasyprint import HTML
 except ImportError:
-    st.error("Erro Crítico: WeasyPrint não encontrado. Verifique o arquivo requirements.txt e packages.txt.")
+    st.error("Erro Crítico: WeasyPrint não encontrado. Verifique o arquivo packages.txt e requirements.txt.")
 
 try:
     import fitz  # PyMuPDF
 except ImportError:
     st.error("Erro Crítico: PyMuPDF não encontrado. Certifique-se de incluir 'pymupdf' no requirements.txt.")
 
-# Pixel transparente para evitar quebras visuais em campos vazios no PDF
+try:
+    import cloudscraper
+except ImportError:
+    st.error("Erro Crítico: Motor de evasão não encontrado. Adicione 'cloudscraper' ao requirements.txt.")
+
+# Pixel transparente de segurança para evitar quebras visuais (ícones de erro) no PDF
 PIXEL_TRANSPARENTE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
 
-# --- FUNÇÕES DE HIGIENIZAÇÃO E TRATAMENTO ---
+# --- FUNÇÕES DE HIGIENIZAÇÃO E REDE ---
 
 def formatar_lista_html(texto):
     if pd.isna(texto) or not str(texto).strip():
         return "<ul><li>Nenhum item cadastrado.</li></ul>"
-    # Correção do NameError: Escopo da variável homogeneizado para 'linha'
     linhas = [linha.strip().lstrip('•').lstrip('-').strip() for linha in str(texto).split('\n') if linha.strip()]
     return "<ul>" + "".join(f"<li>{linha}</li>" for linha in linhas) + "</ul>"
 
 def limpar_url_google(url):
+    """Extrai a URL original de links de redirecionamento de busca do Google."""
     if pd.isna(url) or not str(url).strip():
         return ""
     url_str = str(url).strip()
@@ -51,7 +57,10 @@ def limpar_url_google(url):
     return url_str
 
 def baixar_imagem_base64(url_planilha):
-    """Baixa ativos contornando bloqueios de segurança (Hotlinking) de servidores externos"""
+    """
+    Motor Anti-Hotlink Avançado: Tenta download direto simulado e, em caso 
+    de bloqueio por firewalls de e-commerces, utiliza um Proxy CDN.
+    """
     url_limpa = limpar_url_google(url_planilha)
     
     if not url_limpa:
@@ -61,28 +70,40 @@ def baixar_imagem_base64(url_planilha):
     if not url_limpa.startswith('http'):
         return PIXEL_TRANSPARENTE 
 
+    headers_disfarce = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "Referer": "https://www.google.com/"
+    }
+
+    # ESTRATÉGIA 1: Acesso direto mascarado via CloudScraper
     try:
-        # ALGORITMO ANTI-HOTLINK: Simula comportamento humano vindo do Google
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-            "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Referer": "https://www.google.com/"
-        }
-        
-        resposta = requests.get(url_limpa, headers=headers, timeout=7) 
+        scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
+        resposta = scraper.get(url_limpa, headers=headers_disfarce, timeout=6) 
         
         if resposta.status_code == 200:
-            tipo_conteudo = resposta.headers.get('content-type', '')
-            if not tipo_conteudo.startswith('image/'):
-                return PIXEL_TRANSPARENTE
-                
-            b64 = base64.b64encode(resposta.content).decode('utf-8')
-            return f"data:{tipo_conteudo};base64,{b64}"
-            
+            tipo_conteudo = resposta.headers.get('content-type', '').lower()
+            if tipo_conteudo.startswith('image/'):
+                b64 = base64.b64encode(resposta.content).decode('utf-8')
+                return f"data:{tipo_conteudo};base64,{b64}"
     except Exception:
-        pass
-    
+        pass # Falhou silenciosamente, passa para a estratégia 2
+        
+    # ESTRATÉGIA 2: Acesso via Proxy CDN Global (Bypass de Firewalls de Varejistas)
+    try:
+        url_codificada = urllib.parse.quote(url_limpa)
+        url_proxy = f"https://wsrv.nl/?url={url_codificada}"
+        
+        resposta_proxy = requests.get(url_proxy, headers=headers_disfarce, timeout=8)
+        
+        if resposta_proxy.status_code == 200:
+            tipo_conteudo = resposta_proxy.headers.get('content-type', '').lower()
+            if tipo_conteudo.startswith('image/'):
+                b64 = base64.b64encode(resposta_proxy.content).decode('utf-8')
+                return f"data:{tipo_conteudo};base64,{b64}"
+    except Exception:
+        pass # Se ambas as estratégias falharem, o site bloqueou totalmente o ativo
+
     return PIXEL_TRANSPARENTE
 
 def carregar_arquivo_local_base64(caminho_arquivo):
@@ -95,16 +116,14 @@ def carregar_arquivo_local_base64(caminho_arquivo):
     return ""
 
 def exibir_pdf_como_imagem(pdf_bytes):
-    """Converte os bytes do PDF em uma imagem estável exibida nativamente no Streamlit"""
     try:
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         pagina = doc.load_page(0)
         pix = pagina.get_pixmap(dpi=150)
         img_bytes = pix.tobytes("png")
-        # Correção do Warning de Depreciação: use_container_width alterado para width='stretch'
         st.image(img_bytes, width="stretch")
     except Exception as e:
-        st.error(f"Erro no motor gráfico de renderização do preview: {str(e)}")
+        st.error(f"Erro no motor gráfico de renderização: {str(e)}")
 
 # --- PROCESSAMENTO GRÁFICO JINJA2 ---
 
@@ -187,7 +206,7 @@ if upload_planilha:
         st.write(f"**Categoria Testada:** {df.iloc[0].get('NOME_CATEGORIA', 'N/A')}")
         st.write(f"**Total Identificado:** {len(df)} categorias na planilha.")
         
-        with st.spinner("Baixando imagens da internet e compilando preview gráfico..."):
+        with st.spinner("Baixando imagens da internet (Bypass e Proxy CDN)..."):
             primeira_linha = df.iloc[0]
             pdf_preview_bytes, _ = gerar_pdf_bytes(primeira_linha, jinja_template, df.columns)
         st.success("Preview estruturado!")
@@ -196,7 +215,6 @@ if upload_planilha:
         st.subheader("2. Geração em Lote")
         st.write("Se o layout ao lado estiver correto, inicie a produção:")
         
-        # Correção do Warning de Depreciação
         iniciar_lote = st.button("🚀 Gerar Pacote Completo (ZIP)", type="primary", width="stretch")
         
         if iniciar_lote:
@@ -215,7 +233,6 @@ if upload_planilha:
             st.balloons()
             
             zip_buffer.seek(0)
-            # Correção do Warning de Depreciação
             st.download_button(
                 label="⬇️ Baixar Arquivo ZIP",
                 data=zip_buffer,
