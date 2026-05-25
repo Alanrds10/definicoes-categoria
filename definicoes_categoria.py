@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-App Streamlit - Gerador Scanntech com Anti-Hotlink e Preview Nativo em PNG
+App Streamlit - Gerador Scanntech (Correção Sintática e Atualização de Componentes)
 """
 import streamlit as st
 import pandas as pd
@@ -23,7 +23,7 @@ try:
 except ImportError:
     st.error("Erro Crítico: PyMuPDF não encontrado. Certifique-se de incluir 'pymupdf' no requirements.txt.")
 
-# pixel transparente transparente para evitar quebras visuais em campos vazios
+# Pixel transparente para evitar quebras visuais em campos vazios no PDF
 PIXEL_TRANSPARENTE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
 
 # --- FUNÇÕES DE HIGIENIZAÇÃO E TRATAMENTO ---
@@ -31,8 +31,9 @@ PIXEL_TRANSPARENTE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQA
 def formatar_lista_html(texto):
     if pd.isna(texto) or not str(texto).strip():
         return "<ul><li>Nenhum item cadastrado.</li></ul>"
-    linhas = [linha.strip().lstrip('•').lstrip('-').strip() for line in str(texto).split('\n') if line.strip()]
-    return "<ul>" + "".join(f"<li>{linha}</li>" for line in lines) + "</ul>"
+    # Correção do NameError: Escopo da variável homogeneizado para 'linha'
+    linhas = [linha.strip().lstrip('•').lstrip('-').strip() for linha in str(texto).split('\n') if linha.strip()]
+    return "<ul>" + "".join(f"<li>{linha}</li>" for linha in linhas) + "</ul>"
 
 def limpar_url_google(url):
     if pd.isna(url) or not str(url).strip():
@@ -66,7 +67,7 @@ def baixar_imagem_base64(url_planilha):
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
             "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Referer": "https://www.google.com/"  # Força o servidor de destino a aceitar a requisição
+            "Referer": "https://www.google.com/"
         }
         
         resposta = requests.get(url_limpa, headers=headers, timeout=7) 
@@ -100,7 +101,8 @@ def exibir_pdf_como_imagem(pdf_bytes):
         pagina = doc.load_page(0)
         pix = pagina.get_pixmap(dpi=150)
         img_bytes = pix.tobytes("png")
-        st.image(img_bytes, use_container_width=True)
+        # Correção do Warning de Depreciação: use_container_width alterado para width='stretch'
+        st.image(img_bytes, width="stretch")
     except Exception as e:
         st.error(f"Erro no motor gráfico de renderização do preview: {str(e)}")
 
@@ -185,7 +187,7 @@ if upload_planilha:
         st.write(f"**Categoria Testada:** {df.iloc[0].get('NOME_CATEGORIA', 'N/A')}")
         st.write(f"**Total Identificado:** {len(df)} categorias na planilha.")
         
-        with st.spinner("Bixando imagens da internet e compilando preview gráfico..."):
+        with st.spinner("Baixando imagens da internet e compilando preview gráfico..."):
             primeira_linha = df.iloc[0]
             pdf_preview_bytes, _ = gerar_pdf_bytes(primeira_linha, jinja_template, df.columns)
         st.success("Preview estruturado!")
@@ -194,7 +196,8 @@ if upload_planilha:
         st.subheader("2. Geração em Lote")
         st.write("Se o layout ao lado estiver correto, inicie a produção:")
         
-        iniciar_lote = st.button("🚀 Gerar Pacote Completo (ZIP)", type="primary", use_container_width=True)
+        # Correção do Warning de Depreciação
+        iniciar_lote = st.button("🚀 Gerar Pacote Completo (ZIP)", type="primary", width="stretch")
         
         if iniciar_lote:
             zip_buffer = io.BytesIO()
@@ -212,12 +215,13 @@ if upload_planilha:
             st.balloons()
             
             zip_buffer.seek(0)
+            # Correção do Warning de Depreciação
             st.download_button(
                 label="⬇️ Baixar Arquivo ZIP",
                 data=zip_buffer,
                 file_name="Scanntech_Categorias_Lote.zip",
                 mime="application/zip",
-                use_container_width=True
+                width="stretch"
             )
 
     with col_direita:
