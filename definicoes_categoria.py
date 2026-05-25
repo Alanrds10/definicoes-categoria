@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-App Streamlit - Gerador Scanntech com Preview Interativo (Path Absoluto Otimizado)
+App Streamlit - Gerador Scanntech com Preview Interativo e Desembrulho de URLs
 """
 import streamlit as st
 import pandas as pd
@@ -10,32 +10,65 @@ import requests
 import io
 import zipfile
 import os
+from urllib.parse import urlparse, parse_qs, unquote
 
 try:
     from weasyprint import HTML
 except ImportError:
     st.error("Erro Crítico: WeasyPrint não instalado corretamente. Verifique o requirements.txt e o packages.txt.")
 
-# --- FUNÇÕES DE SUPORTE E SANITIZAÇÃO ---
+# --- FUNÇÕES DE SUPORTE E TRATAMENTO DE DADOS ---
 
 def formatar_lista_html(texto):
     if pd.isna(texto) or not str(texto).strip():
         return "<ul><li>Nenhum item cadastrado.</li></ul>"
-    linhas = [linha.strip().lstrip('•').lstrip('-').strip() for linha in str(texto).split('\n') if linha.strip()]
-    return "<ul>" + "".join(f"<li>{linha}</li>" for linha in linhas) + "</ul>"
+    linhas = [linha.strip().lstrip('•').lstrip('-').strip() for line in str(texto).split('\n') if line.strip()]
+    return "<ul>" + "".join(f"<li>{linha}</li>" for line in lines) + "</ul>"
 
-def baixar_imagem_base64(url):
+def limpar_url_google(url):
+    """
+    Detecta links de redirecionamento ou busca do Google Images,
+    extrai e decodifica o link real do ativo final.
+    """
     if pd.isna(url) or not str(url).strip():
         return ""
-    url = str(url).strip()
-    if not url.startswith('http'):
-        return url 
+    
+    url_str = str(url).strip()
+    
+    if "google.com/url" in url_str or "google.com/imgres" in url_str:
+        try:
+            parsed_url = urlparse(url_str)
+            parametros = parse_qs(parsed_url.query)
+            
+            # O Google costuma mascarar o link destino em 'url', 'q' ou 'imgurl'
+            if 'url' in parametros:
+                return unquote(parametros['url'][0])
+            elif 'q' in parametros:
+                return unquote(parametros['q'][0])
+            elif 'imgurl' in parametros:
+                return unquote(parametros['imgurl'][0])
+        except Exception:
+            return url_str # Se falhar na análise, retorna a string original por segurança
+            
+    return url_str
+
+def baixar_imagem_base64(url_planilha):
+    """Trata a URL do Google, faz o download do ativo e converte para Base64"""
+    url_limpa = limpar_url_google(url_planilha)
+    
+    if not url_limpa:
+        return ""
+    if not url_limpa.startswith('http'):
+        return url_limpa # Retorna se já for um caminho local ou base64 direto
+
     try:
-        resposta = requests.get(url, timeout=5) 
+        # User-Agent adicionado para evitar que servidores bloqueiem o download automático do robô
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        resposta = requests.get(url_limpa, headers=headers, timeout=5) 
         if resposta.status_code == 200:
-            tipo = resposta.headers.get('content-type', 'image/png')
+            tipo_conteudo = resposta.headers.get('content-type', 'image/png')
             b64 = base64.b64encode(resposta.content).decode('utf-8')
-            return f"data:{tipo};base64,{b64}"
+            return f"data:{tipo_conteudo};base64,{b64}"
     except Exception:
         pass
     return ""
@@ -50,15 +83,21 @@ def carregar_arquivo_local_base64(caminho_arquivo):
     return ""
 
 def exibir_pdf_no_navegador(pdf_bytes):
-    """Codifica o PDF gerado em Base64 e o exibe via iFrame no Streamlit"""
+    """Codifica o PDF gerado em Base64 e renderiza usando tag OBJECT para evitar bloqueios de CSP"""
     base64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
-    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800" type="application/pdf"></iframe>'
+    pdf_display = f"""
+    <object data="data:application/pdf;base64,{base64_pdf}" type="application/pdf" width="100%" height="800px">
+        <div style="padding:20px; text-align:center; background:#FFF5F5; border:1px solid #FEB2B2; border-radius:4px;">
+            <p style="color:#C53030; font-weight:bold; margin-0-0-10px-0;">Não foi possível renderizar o PDF diretamente na tela.</p>
+            <p style="color:#4A5568; font-size:11px;">Isso ocorre por restrições de segurança do seu navegador. O arquivo está perfeito e pronto para o lote abaixo.</p>
+        </div>
+    </object>
+    """
     st.markdown(pdf_display, unsafe_allow_html=True)
 
-# --- NÚCLEO DE GERAÇÃO ---
+# --- NÚCLEO DE GERAÇÃO INDIVIDUAL ---
 
 def gerar_pdf_bytes(linha, jinja_template, df_colunas):
-    """Recebe uma linha do Pandas e o Template, retorna os bytes do PDF"""
     codigo = str(linha.get('CODIGO_CATEGORIA', '')).strip()
     nome = str(linha.get('NOME_CATEGORIA', '')).strip()
     
@@ -70,7 +109,7 @@ def gerar_pdf_bytes(linha, jinja_template, df_colunas):
         "padrao_descritivo": linha.get('PADRAO_DESCRITIVO', ''),
         
         "obs_contenido": linha['OBS_CONTENIDO'] if 'OBS_CONTENIDO' in df_colunas and pd.notna(linha['OBS_CONTENIDO']) else "",
-        "obs_descritivo": linha['OBS_DESCRITIVO'] if 'OBS_DESCRITIVO' in df_colunas and pd.notna(linha['OBS_DESCRITIVO']) else "",
+        "obs_descritivo": presidential_desc := linha['OBS_DESCRITIVO'] if 'OBS_DESCRITIVO' in df_colunas and pd.notna(linha['OBS_DESCRITIVO']) else "",
         
         "produtos_pertencem_html": formatar_lista_html(linha.get('PRODUTOS_PERTENCEM_TXT', '')),
         "produtos_nao_pertencem_html": formatar_lista_html(linha.get('PRODUTOS_NAO_PERTENCEM_TXT', '')),
@@ -85,7 +124,7 @@ def gerar_pdf_bytes(linha, jinja_template, df_colunas):
         "foto_nao_pertence_1_path": baixar_imagem_base64(linha.get('FOTO_NAO_PERTENCE_1_PATH', '')),
         "foto_nao_pertence_1_desc": linha.get('FOTO_NAO_PERTENCE_1_DESC', '') if pd.notna(linha.get('FOTO_NAO_PERTENCE_1_DESC')) else "",
         "foto_nao_pertence_2_path": baixar_imagem_base64(linha.get('FOTO_NAO_PERTENCE_2_PATH', '')),
-        "foto_nao_pertence_2_desc": linha.get('FOTO_NAO_PERTENCE_2_DESC', '') if pd.notna(linha.get('FOTO_NAO_PERTENCE_2_DESC')) else "",
+        "foto_nao_pertence_2_desc": Web_desc := linha.get('FOTO_NAO_PERTENCE_2_DESC', '') if pd.notna(linha.get('FOTO_NAO_PERTENCE_2_DESC')) else "",
         "foto_nao_pertence_3_path": baixar_imagem_base64(linha.get('FOTO_NAO_PERTENCE_3_PATH', '')),
         "foto_nao_pertence_3_desc": linha.get('FOTO_NAO_PERTENCE_3_DESC', '') if pd.notna(linha.get('FOTO_NAO_PERTENCE_3_DESC')) else "",
     }
@@ -102,27 +141,23 @@ def gerar_pdf_bytes(linha, jinja_template, df_colunas):
 
 st.set_page_config(page_title="Scanntech - Gerador de Categorias", page_icon="📄", layout="wide")
 
-st.title("Geração de Definições Mercadológicas")
-st.markdown("Valide o design no Preview abaixo antes de processar todo o lote.")
+# PONTO ALTERADO: Alinhamento de Título do App
+st.title("Geração de Definições de Categoria")
+st.markdown("Valide o design no Preview abaixo antes de processar todo o lote de definições.")
 
 with st.sidebar:
     st.header("Base de Dados")
     upload_planilha = st.file_uploader("Subir Planilha (.xlsx)", type=["xlsx"])
     st.markdown("---")
-    st.info("Ativos fixos (Template e Logo) acoplados via GitHub.")
+    # PONTO ALTERADO: Removida a caixa de texto informativa sobre arquivos acoplados
 
 if upload_planilha:
-    # --- MAPEAMENTO ABSOLUTO DE DIRETÓRIOS ---
-    # Descobre exatamente onde este arquivo app.py está morando no servidor
     diretorio_atual = os.path.dirname(os.path.abspath(__file__))
-    
-    # Ancara os arquivos na mesma pasta do script
     caminho_html = os.path.join(diretorio_atual, "HTML_CSS_DEFINICAO-DE-CATEGORIA.html")
     caminho_logo = os.path.join(diretorio_atual, "Logo Scanntech Versão Preferencial.png")
     
     if not os.path.exists(caminho_html):
         st.error(f"⚠️ Erro de Leitura: O arquivo '{caminho_html}' não foi encontrado.")
-        st.warning("Verifique no seu GitHub se o arquivo fez upload corretamente e se as letras maiúsculas/minúsculas estão exatas.")
         st.stop()
         
     with open(caminho_html, "r", encoding="utf-8") as f:
@@ -182,6 +217,7 @@ if upload_planilha:
 
     with col_direita:
         st.subheader("Visualizador do PDF")
+        # PONTO ALTERADO: Função de renderização robusta ativa
         exibir_pdf_no_navegador(pdf_preview_bytes)
 
 else:
