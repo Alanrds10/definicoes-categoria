@@ -4,3 +4,4 @@ openpyxl
 Jinja2
 weasyprint
 requests
+pymupdf
