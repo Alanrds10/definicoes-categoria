@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-App Streamlit - Gerador Scanntech com Preview Interativo
+App Streamlit - Gerador Scanntech com Preview Interativo (Path Absoluto Otimizado)
 """
 import streamlit as st
 import pandas as pd
@@ -93,7 +93,6 @@ def gerar_pdf_bytes(linha, jinja_template, df_colunas):
     html_renderizado = jinja_template.render(contexto)
     pdf_bytes = HTML(string=html_renderizado, base_url=".").write_pdf()
     
-    # Retorna também o nome seguro para salvar
     nome_seguro = "".join(char for char in nome if char.isalnum() or char in (' ', '_', '-')).rstrip()
     nome_arquivo = f"Definicao_{codigo.replace('.', '_')}_{nome_seguro}.pdf"
     
@@ -113,12 +112,17 @@ with st.sidebar:
     st.info("Ativos fixos (Template e Logo) acoplados via GitHub.")
 
 if upload_planilha:
-    # PREPARAÇÃO DO TEMPLATE (Fazemos isso apenas uma vez)
-    caminho_html = "HTML_CSS_DEFINICAO-DE-CATEGORIA.html"
-    caminho_logo = "Logo Scanntech Versão Preferencial.png"
+    # --- MAPEAMENTO ABSOLUTO DE DIRETÓRIOS ---
+    # Descobre exatamente onde este arquivo app.py está morando no servidor
+    diretorio_atual = os.path.dirname(os.path.abspath(__file__))
+    
+    # Ancara os arquivos na mesma pasta do script
+    caminho_html = os.path.join(diretorio_atual, "HTML_CSS_DEFINICAO-DE-CATEGORIA.html")
+    caminho_logo = os.path.join(diretorio_atual, "Logo Scanntech Versão Preferencial.png")
     
     if not os.path.exists(caminho_html):
-        st.error(f"Erro Crítico: {caminho_html} não encontrado no repositório.")
+        st.error(f"⚠️ Erro de Leitura: O arquivo '{caminho_html}' não foi encontrado.")
+        st.warning("Verifique no seu GitHub se o arquivo fez upload corretamente e se as letras maiúsculas/minúsculas estão exatas.")
         st.stop()
         
     with open(caminho_html, "r", encoding="utf-8") as f:
@@ -132,7 +136,6 @@ if upload_planilha:
     jinja_template = Template(html_preparado)
     df = pd.read_excel(upload_planilha)
     
-    # Dividindo a tela em Duas Colunas
     col_esquerda, col_direita = st.columns([1, 2])
     
     with col_esquerda:
@@ -140,7 +143,6 @@ if upload_planilha:
         st.write(f"**Categoria Testada:** {df.iloc[0].get('NOME_CATEGORIA', 'N/A')}")
         st.write(f"**Total Identificado:** {len(df)} categorias na planilha.")
         
-        # Gera apenas o primeiro PDF para visualização
         with st.spinner("Renderizando preview..."):
             primeira_linha = df.iloc[0]
             pdf_preview_bytes, _ = gerar_pdf_bytes(primeira_linha, jinja_template, df.columns)
@@ -161,7 +163,6 @@ if upload_planilha:
                 for index, linha in df.iterrows():
                     status_texto.text(f"Processando [{index+1}/{len(df)}]: {linha.get('NOME_CATEGORIA', '...')}")
                     
-                    # Usa a nossa função modular
                     bytes_pdf, nome_arquivo = gerar_pdf_bytes(linha, jinja_template, df.columns)
                     zip_file.writestr(nome_arquivo, bytes_pdf)
                     
@@ -181,7 +182,6 @@ if upload_planilha:
 
     with col_direita:
         st.subheader("Visualizador do PDF")
-        # Exibe o PDF do preview no Iframe
         exibir_pdf_no_navegador(pdf_preview_bytes)
 
 else:
