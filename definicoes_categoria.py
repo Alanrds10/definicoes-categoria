@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-App Streamlit - Gerador de Estrutura Mercadológica Scanntech (Automático via Repositório)
+App Streamlit - Gerador Scanntech com Preview Interativo
 """
 import streamlit as st
 import pandas as pd
@@ -14,146 +14,175 @@ import os
 try:
     from weasyprint import HTML
 except ImportError:
-    st.error("Erro Crítico: WeasyPrint não instalado. Verifique o requirements.txt.")
+    st.error("Erro Crítico: WeasyPrint não instalado corretamente. Verifique o requirements.txt e o packages.txt.")
 
-# --- Funções Auxiliares ---
+# --- FUNÇÕES DE SUPORTE E SANITIZAÇÃO ---
 
 def formatar_lista_html(texto):
-    """Converte texto com marcadores da planilha em itens de lista HTML <li>."""
     if pd.isna(texto) or not str(texto).strip():
         return "<ul><li>Nenhum item cadastrado.</li></ul>"
     linhas = [linha.strip().lstrip('•').lstrip('-').strip() for linha in str(texto).split('\n') if linha.strip()]
     return "<ul>" + "".join(f"<li>{linha}</li>" for linha in linhas) + "</ul>"
 
 def baixar_imagem_base64(url):
-    """Baixa imagem da web e converte para Base64 (ignora erros graciosamente)."""
     if pd.isna(url) or not str(url).strip():
         return ""
     url = str(url).strip()
     if not url.startswith('http'):
         return url 
-
     try:
         resposta = requests.get(url, timeout=5) 
         if resposta.status_code == 200:
-            tipo_conteudo = resposta.headers.get('content-type', 'image/png')
+            tipo = resposta.headers.get('content-type', 'image/png')
             b64 = base64.b64encode(resposta.content).decode('utf-8')
-            return f"data:{tipo_conteudo};base64,{b64}"
+            return f"data:{tipo};base64,{b64}"
     except Exception:
         pass
     return ""
 
 def carregar_arquivo_local_base64(caminho_arquivo):
-    """Lê um arquivo do próprio repositório GitHub e converte para Base64."""
     if os.path.exists(caminho_arquivo):
         with open(caminho_arquivo, "rb") as f:
             b64 = base64.b64encode(f.read()).decode('utf-8')
             ext = caminho_arquivo.split('.')[-1].lower()
-            mimetype = "image/png" if ext == "png" else "image/jpeg"
-            return f"data:{mimetype};base64,{b64}"
+            tipo = "image/png" if ext == "png" else "image/jpeg"
+            return f"data:{tipo};base64,{b64}"
     return ""
 
-# --- Configuração da Interface Streamlit ---
+def exibir_pdf_no_navegador(pdf_bytes):
+    """Codifica o PDF gerado em Base64 e o exibe via iFrame no Streamlit"""
+    base64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
+    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800" type="application/pdf"></iframe>'
+    st.markdown(pdf_display, unsafe_allow_html=True)
+
+# --- NÚCLEO DE GERAÇÃO ---
+
+def gerar_pdf_bytes(linha, jinja_template, df_colunas):
+    """Recebe uma linha do Pandas e o Template, retorna os bytes do PDF"""
+    codigo = str(linha.get('CODIGO_CATEGORIA', '')).strip()
+    nome = str(linha.get('NOME_CATEGORIA', '')).strip()
+    
+    contexto = {
+        "nome_categoria": nome,
+        "codigo_categoria": codigo,
+        "definicao": linha.get('DEFINICAO', ''),
+        "padrao_contenido": linha.get('PADRAO_CONTENIDO', ''),
+        "padrao_descritivo": linha.get('PADRAO_DESCRITIVO', ''),
+        
+        "obs_contenido": linha['OBS_CONTENIDO'] if 'OBS_CONTENIDO' in df_colunas and pd.notna(linha['OBS_CONTENIDO']) else "",
+        "obs_descritivo": linha['OBS_DESCRITIVO'] if 'OBS_DESCRITIVO' in df_colunas and pd.notna(linha['OBS_DESCRITIVO']) else "",
+        
+        "produtos_pertencem_html": formatar_lista_html(linha.get('PRODUTOS_PERTENCEM_TXT', '')),
+        "produtos_nao_pertencem_html": formatar_lista_html(linha.get('PRODUTOS_NAO_PERTENCEM_TXT', '')),
+        
+        "foto_pertence_1_path": baixar_imagem_base64(linha.get('FOTO_PERTENCE_1_PATH', '')),
+        "foto_pertence_1_desc": linha.get('FOTO_PERTENCE_1_DESC', '') if pd.notna(linha.get('FOTO_PERTENCE_1_DESC')) else "",
+        "foto_pertence_2_path": baixar_imagem_base64(linha.get('FOTO_PERTENCE_2_PATH', '')),
+        "foto_pertence_2_desc": linha.get('FOTO_PERTENCE_2_DESC', '') if pd.notna(linha.get('FOTO_PERTENCE_2_DESC')) else "",
+        "foto_pertence_3_path": baixar_imagem_base64(linha.get('FOTO_PERTENCE_3_PATH', '')),
+        "foto_pertence_3_desc": linha.get('FOTO_PERTENCE_3_DESC', '') if pd.notna(linha.get('FOTO_PERTENCE_3_DESC')) else "",
+        
+        "foto_nao_pertence_1_path": baixar_imagem_base64(linha.get('FOTO_NAO_PERTENCE_1_PATH', '')),
+        "foto_nao_pertence_1_desc": linha.get('FOTO_NAO_PERTENCE_1_DESC', '') if pd.notna(linha.get('FOTO_NAO_PERTENCE_1_DESC')) else "",
+        "foto_nao_pertence_2_path": baixar_imagem_base64(linha.get('FOTO_NAO_PERTENCE_2_PATH', '')),
+        "foto_nao_pertence_2_desc": linha.get('FOTO_NAO_PERTENCE_2_DESC', '') if pd.notna(linha.get('FOTO_NAO_PERTENCE_2_DESC')) else "",
+        "foto_nao_pertence_3_path": baixar_imagem_base64(linha.get('FOTO_NAO_PERTENCE_3_PATH', '')),
+        "foto_nao_pertence_3_desc": linha.get('FOTO_NAO_PERTENCE_3_DESC', '') if pd.notna(linha.get('FOTO_NAO_PERTENCE_3_DESC')) else "",
+    }
+    
+    html_renderizado = jinja_template.render(contexto)
+    pdf_bytes = HTML(string=html_renderizado, base_url=".").write_pdf()
+    
+    # Retorna também o nome seguro para salvar
+    nome_seguro = "".join(char for char in nome if char.isalnum() or char in (' ', '_', '-')).rstrip()
+    nome_arquivo = f"Definicao_{codigo.replace('.', '_')}_{nome_seguro}.pdf"
+    
+    return pdf_bytes, nome_arquivo
+
+# --- INTERFACE DE USUÁRIO (UI) ---
 
 st.set_page_config(page_title="Scanntech - Gerador de Categorias", page_icon="📄", layout="wide")
 
-st.title("Geração de Definições de Estrutura Mercadológica")
-st.markdown("Faça o upload da planilha atualizada. O template e a identidade visual são carregados automaticamente do sistema.")
+st.title("Geração de Definições Mercadológicas")
+st.markdown("Valide o design no Preview abaixo antes de processar todo o lote.")
 
 with st.sidebar:
     st.header("Base de Dados")
     upload_planilha = st.file_uploader("Subir Planilha (.xlsx)", type=["xlsx"])
-    
     st.markdown("---")
-    st.info("📌 **Ativos do Sistema:**\nO layout HTML e as imagens da marcação estão sendo puxados automaticamente da raiz do repositório.")
+    st.info("Ativos fixos (Template e Logo) acoplados via GitHub.")
 
-# --- Lógica de Processamento Principal ---
-
-if st.button("Gerar PDFs de Categorias", type="primary"):
+if upload_planilha:
+    # PREPARAÇÃO DO TEMPLATE (Fazemos isso apenas uma vez)
+    caminho_html = "HTML_CSS_DEFINICAO-DE-CATEGORIA.html"
+    caminho_logo = "Logo Scanntech Versão Preferencial.png"
     
-    if not upload_planilha:
-        st.warning("⚠️ Faça o upload da Planilha de Dados (.xlsx) para prosseguir.")
+    if not os.path.exists(caminho_html):
+        st.error(f"Erro Crítico: {caminho_html} não encontrado no repositório.")
         st.stop()
-
-    with st.spinner("Lendo arquivos do repositório e estruturando o gerador..."):
-        # 1. Busca os arquivos que já estão no seu repositório GitHub
-        caminho_html = "HTML_CSS_DEFINICAO-DE-CATEGORIA.html"
-        caminho_logo = "Logo Scanntech Versão Preferencial.png"
         
-        # Lê o HTML oficial
-        if not os.path.exists(caminho_html):
-            st.error(f"Erro: O arquivo '{caminho_html}' não foi encontrado na raiz do projeto.")
-            st.stop()
-            
-        with open(caminho_html, "r", encoding="utf-8") as f:
-            html_preparado = f.read()
+    with open(caminho_html, "r", encoding="utf-8") as f:
+        html_preparado = f.read()
 
-        # Converte a logo local em Base64 e injeta no HTML
-        logo_b64 = carregar_arquivo_local_base64(caminho_logo)
-        if logo_b64:
-            html_preparado = html_preparado.replace('id vs/Logo Scanntech Versão Preferencial.png', logo_b64)
-            # Caso a logo estivesse referenciada apenas pelo nome
-            html_preparado = html_preparado.replace('Logo Scanntech Versão Preferencial.png', logo_b64)
+    logo_b64 = carregar_arquivo_local_base64(caminho_logo)
+    if logo_b64:
+        html_preparado = html_preparado.replace('id vs/Logo Scanntech Versão Preferencial.png', logo_b64)
+        html_preparado = html_preparado.replace('Logo Scanntech Versão Preferencial.png', logo_b64)
 
-        jinja_template = Template(html_preparado)
-        df = pd.read_excel(upload_planilha)
-        zip_buffer = io.BytesIO()
-        
-        barra_progresso = st.progress(0)
-        total_linhas = len(df)
-        status_texto = st.empty()
-
-    # 2. Renderização em Lote
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        for index, linha in df.iterrows():
-            codigo = str(linha.get('CODIGO_CATEGORIA', f"CAT_{index}")).strip()
-            nome = str(linha.get('NOME_CATEGORIA', "S_Nome")).strip()
-            
-            nome_seguro = "".join(char for char in nome if char.isalnum() or char in (' ', '_', '-')).rstrip()
-            nome_arquivo_pdf = f"Definicao_{codigo.replace('.', '_')}_{nome_seguro}.pdf"
-            
-            status_texto.text(f"Processando [{index+1}/{total_linhas}]: {nome}")
-            
-            contexto = {
-                "nome_categoria": nome,
-                "codigo_categoria": codigo,
-                "definicao": linha.get('DEFINICAO', ''),
-                "padrao_contenido": linha.get('PADRAO_CONTENIDO', ''),
-                "padrao_descritivo": linha.get('PADRAO_DESCRITIVO', ''),
-                
-                "produtos_pertencem_html": formatar_lista_html(linha.get('PRODUTOS_PERTENCEM_TXT', '')),
-                "produtos_nao_pertencem_html": formatar_lista_html(linha.get('PRODUTOS_NAO_PERTENCEM_TXT', '')),
-                
-                # Baixa imagens das URLs
-                "foto_pertence_1_path": baixar_imagem_base64(linha.get('FOTO_PERTENCE_1_PATH', '')),
-                "foto_pertence_1_desc": linha.get('FOTO_PERTENCE_1_DESC', '') if pd.notna(linha.get('FOTO_PERTENCE_1_DESC')) else "",
-                "foto_pertence_2_path": baixar_imagem_base64(linha.get('FOTO_PERTENCE_2_PATH', '')),
-                "foto_pertence_2_desc": linha.get('FOTO_PERTENCE_2_DESC', '') if pd.notna(linha.get('FOTO_PERTENCE_2_DESC')) else "",
-                "foto_pertence_3_path": baixar_imagem_base64(linha.get('FOTO_PERTENCE_3_PATH', '')),
-                "foto_pertence_3_desc": linha.get('FOTO_PERTENCE_3_DESC', '') if pd.notna(linha.get('FOTO_PERTENCE_3_DESC')) else "",
-                
-                "foto_nao_pertence_1_path": baixar_imagem_base64(linha.get('FOTO_NAO_PERTENCE_1_PATH', '')),
-                "foto_nao_pertence_1_desc": linha.get('FOTO_NAO_PERTENCE_1_DESC', '') if pd.notna(linha.get('FOTO_NAO_PERTENCE_1_DESC')) else "",
-                "foto_nao_pertence_2_path": baixar_imagem_base64(linha.get('FOTO_NAO_PERTENCE_2_PATH', '')),
-                "foto_nao_pertence_2_desc": linha.get('FOTO_NAO_PERTENCE_2_DESC', '') if pd.notna(linha.get('FOTO_NAO_PERTENCE_2_DESC')) else "",
-                "foto_nao_pertence_3_path": baixar_imagem_base64(linha.get('FOTO_NAO_PERTENCE_3_PATH', '')),
-                "foto_nao_pertence_3_desc": linha.get('FOTO_NAO_PERTENCE_3_DESC', '') if pd.notna(linha.get('FOTO_NAO_PERTENCE_3_DESC')) else "",
-            }
-            
-            html_renderizado = jinja_template.render(contexto)
-            pdf_bytes = HTML(string=html_renderizado, base_url=".").write_pdf()
-            zip_file.writestr(nome_arquivo_pdf, pdf_bytes)
-            
-            barra_progresso.progress((index + 1) / total_linhas)
-
-    status_texto.text("✅ Sucesso! Todas as definições foram geradas.")
-    st.balloons()
+    jinja_template = Template(html_preparado)
+    df = pd.read_excel(upload_planilha)
     
-    zip_buffer.seek(0)
-    st.download_button(
-        label="⬇️ Baixar Pacote Completo (.ZIP)",
-        data=zip_buffer,
-        file_name="Scanntech_Categorias_Lote.zip",
-        mime="application/zip",
-        type="primary"
-    )
+    # Dividindo a tela em Duas Colunas
+    col_esquerda, col_direita = st.columns([1, 2])
+    
+    with col_esquerda:
+        st.subheader("1. Preview da Primeira Linha")
+        st.write(f"**Categoria Testada:** {df.iloc[0].get('NOME_CATEGORIA', 'N/A')}")
+        st.write(f"**Total Identificado:** {len(df)} categorias na planilha.")
+        
+        # Gera apenas o primeiro PDF para visualização
+        with st.spinner("Renderizando preview..."):
+            primeira_linha = df.iloc[0]
+            pdf_preview_bytes, _ = gerar_pdf_bytes(primeira_linha, jinja_template, df.columns)
+        st.success("Preview gerado com sucesso!")
+        
+        st.markdown("---")
+        st.subheader("2. Geração em Lote")
+        st.write("Se o layout ao lado estiver correto, inicie a produção:")
+        
+        iniciar_lote = st.button("🚀 Gerar Pacote Completo (ZIP)", type="primary", use_container_width=True)
+        
+        if iniciar_lote:
+            zip_buffer = io.BytesIO()
+            barra_progresso = st.progress(0)
+            status_texto = st.empty()
+            
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                for index, linha in df.iterrows():
+                    status_texto.text(f"Processando [{index+1}/{len(df)}]: {linha.get('NOME_CATEGORIA', '...')}")
+                    
+                    # Usa a nossa função modular
+                    bytes_pdf, nome_arquivo = gerar_pdf_bytes(linha, jinja_template, df.columns)
+                    zip_file.writestr(nome_arquivo, bytes_pdf)
+                    
+                    barra_progresso.progress((index + 1) / len(df))
+            
+            status_texto.text("✅ Pacote finalizado!")
+            st.balloons()
+            
+            zip_buffer.seek(0)
+            st.download_button(
+                label="⬇️ Baixar Arquivo ZIP",
+                data=zip_buffer,
+                file_name="Scanntech_Categorias_Lote.zip",
+                mime="application/zip",
+                use_container_width=True
+            )
+
+    with col_direita:
+        st.subheader("Visualizador do PDF")
+        # Exibe o PDF do preview no Iframe
+        exibir_pdf_no_navegador(pdf_preview_bytes)
+
+else:
+    st.info("⬆️ Aguardando o upload da planilha na barra lateral.")
