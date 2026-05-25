@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <title>Definição de Categoria - Scanntech</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@100;300;400;600&display=swap" rel="stylesheet">
+    <style>
+        /* Configuração estrita da Folha A4 */
+        @page {
+            size: A4 portrait;
+            margin: 25mm 20mm 25mm 20mm;
+            @bottom-center {
+                content: "Data Excellence - Maio/2026";
+                font-family: 'Sora', sans-serif;
+                font-size: 8pt;
+                color: #A0AEC0;
+                font-weight: 400;
+                border-top: 1px solid #E2E8F0;
+                width: 100%;
+                padding-top: 5px;
+            }
+        }
+        
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Sora', sans-serif;
+            color: #2D3748;
+            margin: 0;
+            padding: 0;
+            font-size: 10pt;
+            line-height: 1.6;
+            background-color: #ffffff;
+        }
+
+        /* Cabeçalho com Posicionamento de Ativos */
+        .header {
+            position: relative;
+            border-bottom: 2px solid #054FE1; /* Azul Scanntech */
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+            overflow: visible;
+        }
+        
+        .logo {
+            height: 40px; /* Tamanho ajustado para o logo preferencial */
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .grafismo-topo {
+            position: absolute;
+            top: -20px;
+            right: 0px;
+            height: 120px;
+            opacity: 0.9;
+            z-index: -1;
+        }
+
+        .category-title {
+            font-size: 26pt;
+            font-weight: 300; /* Sora Light */
+            color: #054FE1;
+            margin: 0 0 5px 0;
+            line-height: 1.1;
+            width: 80%; /* Evita colisão do texto com o grafismo */
+        }
+
+        .category-subtitle {
+            font-size: 14pt;
+            font-weight: 100; /* Sora Thin */
+            color: #4A5568;
+            margin: 0;
+        }
+
+        /* Títulos de Seção */
+        .section-title {
+            font-size: 12pt;
+            font-weight: 600; /* Sora SemiBold */
+            color: #054FE1;
+            margin: 25px 0 10px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            page-break-after: avoid;
+        }
+
+        /* Textos e Particularidades */
+        .text-block {
+            margin-bottom: 20px;
+            text-align: justify;
+        }
+
+        .particularity-item {
+            margin-bottom: 10px;
+        }
+        
+        .particularity-item strong {
+            color: #1A202C;
+            font-weight: 600;
+        }
+
+        .particularity-obs {
+            font-size: 9pt;
+            color: #718096;
+            font-style: italic;
+            margin-top: -5px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        /* Listas de Produtos (Texto) - Minimalistas */
+        .list-container {
+            margin-bottom: 20px;
+            padding-left: 15px;
+        }
+        
+        .list-container.belong {
+            border-left: 3px solid #38A169;
+        }
+        
+        .list-container.not-belong {
+            border-left: 3px solid #E53E3E;
+        }
+
+        .list-container ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .list-container li {
+            margin-bottom: 4px;
+        }
+
+        /* Grade de Imagens (Tabela) */
+        .photo-grid {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 15px 0;
+            margin: 15px -15px 25px -15px;
+            table-layout: fixed;
+            page-break-inside: avoid;
+        }
+
+        .photo-grid td {
+            width: 33.333%;
+            vertical-align: top;
+            text-align: center;
+            padding: 0;
+        }
+
+        .img-box {
+            width: 100%;
+            height: 60mm;
+            border: 1px solid #E2E8F0;
+            background-color: #FFFFFF;
+            padding: 10px;
+            display: block;
+            text-align: center;
+            line-height: 58mm;
+        }
+
+        .belong .img-box { border-bottom: 3px solid #38A169; }
+        .not-belong .img-box { border-bottom: 3px solid #E53E3E; }
+
+        .img-box img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            vertical-align: middle;
+            display: inline-block;
+        }
+
+        .img-caption {
+            margin-top: 10px;
+            font-size: 9pt;
+            font-weight: 600;
+            color: #2D3748;
+            line-height: 1.3;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <img src="id vs/Logo Scanntech Versão Preferencial.png" alt="Scanntech Logo" class="logo">
+        <img src="id vs/Grafismos Scanntech digital RGB - 01.png" alt="Grafismo" class="grafismo-topo">
+        
+        <h1 class="category-title">{{ nome_categoria }}</h1>
+        <h2 class="category-subtitle">Definição Técnica e Estrutura Mercadológica</h2>
+    </div>
+
+    <div class="text-block">
+        {{ definicao }}
+    </div>
+
+    <div class="section-title">Particularidades da Categoria</div>
+    <div class="text-block">
+        <div class="particularity-item">
+            <strong>Contenido:</strong> {{ padrao_contenido }}
+        </div>
+        {% if obs_contenido %}
+        <span class="particularity-obs">Obs: {{ obs_contenido }}</span>
+        {% endif %}
+
+        <div class="particularity-item">
+            <strong>Padrão de Descritivo:</strong> {{ padrao_descritivo }}
+        </div>
+        {% if obs_descritivo %}
+        <span class="particularity-obs">Obs: {{ obs_descritivo }}</span>
+        {% endif %}
+
+        <div class="particularity-item">
+            <strong>Código Data Excellence:</strong> {{ codigo_categoria }}
+        </div>
+    </div>
+
+    <div class="section-title">Exemplos que Pertencem à Categoria</div>
+    <div class="list-container belong">
+        {{ produtos_pertencem_html | safe }}
+    </div>
+
+    <div class="section-title">Exemplos Excluídos da Categoria</div>
+    <div class="list-container not-belong">
+        {{ produtos_nao_pertencem_html | safe }}
+    </div>
+
+    <div class="section-title">Exemplos Visuais - Pertencem</div>
+    <table class="photo-grid belong">
+        <tr>
+            <td>
+                <div class="img-box">
+                    <img src="{{ foto_pertence_1_path }}" alt="Item 1">
+                </div>
+                <div class="img-caption">{{ foto_pertence_1_desc }}</div>
+            </td>
+            <td>
+                <div class="img-box">
+                    <img src="{{ foto_pertence_2_path }}" alt="Item 2">
+                </div>
+                <div class="img-caption">{{ foto_pertence_2_desc }}</div>
+            </td>
+            <td>
+                <div class="img-box">
+                    <img src="{{ foto_pertence_3_path }}" alt="Item 3">
+                </div>
+                <div class="img-caption">{{ foto_pertence_3_desc }}</div>
+            </td>
+        </tr>
+    </table>
+
+    <div class="section-title">Exemplos Visuais - Excluídos</div>
+    <table class="photo-grid not-belong">
+        <tr>
+            <td>
+                <div class="img-box">
+                    <img src="{{ foto_nao_pertence_1_path }}" alt="Item 4">
+                </div>
+                <div class="img-caption">{{ foto_nao_pertence_1_desc }}</div>
+            </td>
+            <td>
+                <div class="img-box">
+                    <img src="{{ foto_nao_pertence_2_path }}" alt="Item 5">
+                </div>
+                <div class="img-caption">{{ foto_nao_pertence_2_desc }}</div>
+            </td>
+            <td>
+                <div class="img-box">
+                    <img src="{{ foto_nao_pertence_3_path }}" alt="Item 6">
+                </div>
+                <div class="img-caption">{{ foto_nao_pertence_3_desc }}</div>
+            </td>
+        </tr>
+    </table>
+
+</body>
+</html>
