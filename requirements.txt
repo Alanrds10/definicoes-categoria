@@ -1,0 +1,6 @@
+streamlit
+pandas
+openpyxl
+Jinja2
+weasyprint
+requests
