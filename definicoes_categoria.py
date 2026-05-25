@@ -22,8 +22,8 @@ except ImportError:
 def formatar_lista_html(texto):
     if pd.isna(texto) or not str(texto).strip():
         return "<ul><li>Nenhum item cadastrado.</li></ul>"
-    linhas = [linha.strip().lstrip('•').lstrip('-').strip() for line in str(texto).split('\n') if line.strip()]
-    return "<ul>" + "".join(f"<li>{linha}</li>" for line in lines) + "</ul>"
+    linhas = [linha.strip().lstrip('•').lstrip('-').strip() for linha in str(texto).split('\n') if linha.strip()]
+    return "<ul>" + "".join(f"<li>{linha}</li>" for linha in linhas) + "</ul>"
 
 def limpar_url_google(url):
     """
@@ -40,7 +40,6 @@ def limpar_url_google(url):
             parsed_url = urlparse(url_str)
             parametros = parse_qs(parsed_url.query)
             
-            # O Google costuma mascarar o link destino em 'url', 'q' ou 'imgurl'
             if 'url' in parametros:
                 return unquote(parametros['url'][0])
             elif 'q' in parametros:
@@ -48,7 +47,7 @@ def limpar_url_google(url):
             elif 'imgurl' in parametros:
                 return unquote(parametros['imgurl'][0])
         except Exception:
-            return url_str # Se falhar na análise, retorna a string original por segurança
+            return url_str 
             
     return url_str
 
@@ -59,10 +58,9 @@ def baixar_imagem_base64(url_planilha):
     if not url_limpa:
         return ""
     if not url_limpa.startswith('http'):
-        return url_limpa # Retorna se já for um caminho local ou base64 direto
+        return url_limpa 
 
     try:
-        # User-Agent adicionado para evitar que servidores bloqueiem o download automático do robô
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         resposta = requests.get(url_limpa, headers=headers, timeout=5) 
         if resposta.status_code == 200:
@@ -88,7 +86,7 @@ def exibir_pdf_no_navegador(pdf_bytes):
     pdf_display = f"""
     <object data="data:application/pdf;base64,{base64_pdf}" type="application/pdf" width="100%" height="800px">
         <div style="padding:20px; text-align:center; background:#FFF5F5; border:1px solid #FEB2B2; border-radius:4px;">
-            <p style="color:#C53030; font-weight:bold; margin-0-0-10px-0;">Não foi possível renderizar o PDF diretamente na tela.</p>
+            <p style="color:#C53030; font-weight:bold; margin:0 0 10px 0;">Não foi possível renderizar o PDF diretamente na tela.</p>
             <p style="color:#4A5568; font-size:11px;">Isso ocorre por restrições de segurança do seu navegador. O arquivo está perfeito e pronto para o lote abaixo.</p>
         </div>
     </object>
@@ -101,6 +99,7 @@ def gerar_pdf_bytes(linha, jinja_template, df_colunas):
     codigo = str(linha.get('CODIGO_CATEGORIA', '')).strip()
     nome = str(linha.get('NOME_CATEGORIA', '')).strip()
     
+    # DICIONÁRIO CORRIGIDO: Remoção dos operadores sintáticos inválidos
     contexto = {
         "nome_categoria": nome,
         "codigo_categoria": codigo,
@@ -109,7 +108,7 @@ def gerar_pdf_bytes(linha, jinja_template, df_colunas):
         "padrao_descritivo": linha.get('PADRAO_DESCRITIVO', ''),
         
         "obs_contenido": linha['OBS_CONTENIDO'] if 'OBS_CONTENIDO' in df_colunas and pd.notna(linha['OBS_CONTENIDO']) else "",
-        "obs_descritivo": presidential_desc := linha['OBS_DESCRITIVO'] if 'OBS_DESCRITIVO' in df_colunas and pd.notna(linha['OBS_DESCRITIVO']) else "",
+        "obs_descritivo": linha['OBS_DESCRITIVO'] if 'OBS_DESCRITIVO' in df_colunas and pd.notna(linha['OBS_DESCRITIVO']) else "",
         
         "produtos_pertencem_html": formatar_lista_html(linha.get('PRODUTOS_PERTENCEM_TXT', '')),
         "produtos_nao_pertencem_html": formatar_lista_html(linha.get('PRODUTOS_NAO_PERTENCEM_TXT', '')),
@@ -124,7 +123,7 @@ def gerar_pdf_bytes(linha, jinja_template, df_colunas):
         "foto_nao_pertence_1_path": baixar_imagem_base64(linha.get('FOTO_NAO_PERTENCE_1_PATH', '')),
         "foto_nao_pertence_1_desc": linha.get('FOTO_NAO_PERTENCE_1_DESC', '') if pd.notna(linha.get('FOTO_NAO_PERTENCE_1_DESC')) else "",
         "foto_nao_pertence_2_path": baixar_imagem_base64(linha.get('FOTO_NAO_PERTENCE_2_PATH', '')),
-        "foto_nao_pertence_2_desc": Web_desc := linha.get('FOTO_NAO_PERTENCE_2_DESC', '') if pd.notna(linha.get('FOTO_NAO_PERTENCE_2_DESC')) else "",
+        "foto_nao_pertence_2_desc": linha.get('FOTO_NAO_PERTENCE_2_DESC', '') if pd.notna(linha.get('FOTO_NAO_PERTENCE_2_DESC')) else "",
         "foto_nao_pertence_3_path": baixar_imagem_base64(linha.get('FOTO_NAO_PERTENCE_3_PATH', '')),
         "foto_nao_pertence_3_desc": linha.get('FOTO_NAO_PERTENCE_3_DESC', '') if pd.notna(linha.get('FOTO_NAO_PERTENCE_3_DESC')) else "",
     }
@@ -141,7 +140,6 @@ def gerar_pdf_bytes(linha, jinja_template, df_colunas):
 
 st.set_page_config(page_title="Scanntech - Gerador de Categorias", page_icon="📄", layout="wide")
 
-# PONTO ALTERADO: Alinhamento de Título do App
 st.title("Geração de Definições de Categoria")
 st.markdown("Valide o design no Preview abaixo antes de processar todo o lote de definições.")
 
@@ -149,7 +147,6 @@ with st.sidebar:
     st.header("Base de Dados")
     upload_planilha = st.file_uploader("Subir Planilha (.xlsx)", type=["xlsx"])
     st.markdown("---")
-    # PONTO ALTERADO: Removida a caixa de texto informativa sobre arquivos acoplados
 
 if upload_planilha:
     diretorio_atual = os.path.dirname(os.path.abspath(__file__))
@@ -217,7 +214,6 @@ if upload_planilha:
 
     with col_direita:
         st.subheader("Visualizador do PDF")
-        # PONTO ALTERADO: Função de renderização robusta ativa
         exibir_pdf_no_navegador(pdf_preview_bytes)
 
 else:
